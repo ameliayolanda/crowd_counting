@@ -1,15 +1,15 @@
 # Universitat de les Illes Balears
 # Intelligent Systems
 # 11761 - Images and Video Analysis
-# Project 1
+# Project 1 - Crowd Counting
 
+# Authors
 # Yolanda, Amelia
 # Alsatouf, Abdulrahman
 
 # IMPORTS
 import cv2
 import numpy as np
-from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -33,7 +33,7 @@ def count_persons(contours, image, remaining_image, labels, tol):
             # Draw bounding boxes
             cv2.rectangle(region_of_interest, (x, y), (x + w, y + h), (255, 0, 0), 2)
             # Draw centroid of bounding box
-            cv2.circle(region_of_interest, (x + w // 2, y + h // 2), 5, (255, 0, 0), -1)
+            cv2.circle(region_of_interest, (x + w // 2, y + h // 2), 6, (255, 0, 0), -1)
             # Compute coordinates for extended bounding boxes
             tolx, toly = int(tol * w), int(tol * h)
             # Draw extended bounding boxes
@@ -53,7 +53,7 @@ def count_persons(contours, image, remaining_image, labels, tol):
                     num_persons += 1
                     hit[k] = 1
                     # Draw centroid of bounding box with a hit
-                    cv2.circle(region_of_interest, tuple(map(int, (cent[0], cent[1] - 410))), 7, (255, 255, 0), -1)
+                    cv2.circle(region_of_interest, tuple(map(int, (cent[0], cent[1] - 410))), 6, (255, 255, 0), -1)
 
         # Merge the region of interest with the remaining image
         output_image = utl.merge_images(remaining_image, region_of_interest)
@@ -137,7 +137,7 @@ def crowd_counting(image_path, images, labels, region_of_interest, tol, plotting
 
             if plotting:
                 # Plot the resulting image
-                plt.imshow(output_image)
+                plt.imshow(closed_image)
                 # Extract coordinates of annotated persons for plotting
                 x, y = zip(*annotated_persons)
                 # Plot points on the image
@@ -170,16 +170,25 @@ estimated_persons, detected_persons = crowd_counting(image_path=image_path,
                                                      labels=labels,
                                                      region_of_interest=region_of_interest,
                                                      tol=tol,
-                                                     plotting=True)
+                                                     plotting=False)
 
 
 # PERFORMANCE EVALUATION
+print('Image level:')
 print(f'Number of annotated persons per image: {annotated_persons}')
-print(f'Estimated number of persons per image (predicted positive): {estimated_persons}')
-print(f'Mean Squared Error: {(1 / annotated_persons.shape[0]) * ((sum(annotated_persons - estimated_persons)) ** 2)}')
+print(f'Estimated number of persons per image (true positive + false positive): {estimated_persons}')
+print(f'Mean Squared Error: '
+      f'{round((1 / annotated_persons.shape[0]) * ((sum(annotated_persons - estimated_persons)) ** 2), 2)}')
 print('')
+print('Person level:')
 print(f'Detected number of persons per image (true positive): {detected_persons}')
-print(f'Average accuracy per image: {round(np.mean(detected_persons / annotated_persons) * 100, 2)}%')
+print(f'Precision per image: {np.round((detected_persons / estimated_persons) , 4)}')
+print(f'Average precision per image: {round(np.mean(detected_persons / estimated_persons) * 100, 2)}%')
+print('')
+print(f'Recall per image: '
+      f'{np.round(detected_persons / (estimated_persons + (annotated_persons - detected_persons)), 4)}')
+print(f'Average recall per image: '
+      f'{round(np.mean(detected_persons / (estimated_persons + (annotated_persons - detected_persons))) * 100, 2)}%')
 print('')
 print(f'Correlation Coefficient (annotated vs. detected persons): '
       f'{round(np.corrcoef(annotated_persons, detected_persons)[0, 1], 4)}')

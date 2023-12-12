@@ -1,6 +1,8 @@
+# IMPORTS
 import numpy as np
 
 
+# UTILITIES
 def crop_image(image, crop_coordinates):
     try:
         # Extract the coordinates of the crop
@@ -54,4 +56,8 @@ def windowing(image, window_center, window_width):
 
 
 def euclidean_distance(point1, point2):
-    return np.sqrt(np.sum((np.array(point2) - np.array(point1)) ** 2))
+    try:
+        return np.sqrt(np.sum((np.array(point2) - np.array(point1)) ** 2))
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return None
