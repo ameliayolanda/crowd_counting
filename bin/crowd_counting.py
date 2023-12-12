@@ -31,9 +31,9 @@ def count_persons(contours, image, remaining_image, labels, tol):
         for i in range(len(contours)):
             x, y, w, h = cv2.boundingRect(contours[i])
             # Draw bounding boxes
-            cv2.rectangle(region_of_interest, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            cv2.rectangle(region_of_interest, (x, y), (x + w, y + h), (255, 0, 0), 2)
             # Draw centroid of bounding box
-            cv2.circle(region_of_interest, (x + w // 2, y + h // 2), 5, (0, 0, 255), -1)
+            cv2.circle(region_of_interest, (x + w // 2, y + h // 2), 5, (255, 0, 0), -1)
             # Compute coordinates for extended bounding boxes
             tolx, toly = int(tol * w), int(tol * h)
             # Draw extended bounding boxes
@@ -53,7 +53,7 @@ def count_persons(contours, image, remaining_image, labels, tol):
                     num_persons += 1
                     hit[k] = 1
                     # Draw centroid of bounding box with a hit
-                    cv2.circle(region_of_interest, tuple(map(int, (cent[0], cent[1] - 410))), 7, (255, 0, 0), -1)
+                    cv2.circle(region_of_interest, tuple(map(int, (cent[0], cent[1] - 410))), 7, (255, 255, 0), -1)
 
         # Merge the region of interest with the remaining image
         output_image = utl.merge_images(remaining_image, region_of_interest)
@@ -145,7 +145,7 @@ def crowd_counting(image_path, images, labels, region_of_interest, tol, plotting
                 # Turn off axis labels
                 plt.axis('off')
                 # Save the figure
-                plt.savefig('../results/output_image_' + image_name + '.png')
+                plt.savefig('../results/output_image_' + image_name, dpi=500)
                 # Display the image
                 plt.show()
 
