@@ -9,6 +9,7 @@
 # IMPORTS
 import cv2
 import numpy as np
+from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -16,70 +17,43 @@ import utilities as utl
 
 
 # FUNCTIONALITY
-def filter_white_regions(binary_image, min_region_area, max_region_area, min_aspect_ratio, max_aspect_ratio):
+def count_persons(contours, image, remaining_image, labels, tol):
     try:
-        # Apply morphological opening
-        kernel = np.ones((5, 5), np.uint8)
-        opened_image = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel)
-
-        # Apply morphological closing to connect small white regions
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        closed_image = cv2.morphologyEx(opened_image, cv2.MORPH_CLOSE, kernel)
-
-        # Find contours in the closed image
-        contours, _ = cv2.findContours(closed_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        # Create a mask for the regions to keep
-        keep_mask = np.zeros_like(closed_image)
-
-        # Iterate through the contours and keep only the regions within the specified area range
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            if min_region_area < area < max_region_area \
-                    and min_aspect_ratio < (
-                    cv2.boundingRect(contour)[2] / cv2.boundingRect(contour)[3]) < max_aspect_ratio:
-                cv2.drawContours(keep_mask, [contour], -1, 255, thickness=cv2.FILLED)
-
-        # Apply the keep mask to the binary image
-        result_image = cv2.bitwise_and(binary_image, binary_image, mask=keep_mask)
-
-        return result_image
-
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return None
-
-
-def count_persons(image, processed_image, remaining_image, labels, tol):
-    try:
-        # Find contours in the binary image
-        contours, _ = cv2.findContours(processed_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
         # Store the estimated number of persons
         num_estimated_persons = len(contours)
 
-        # Define a tolerance value for bounding boxes
-        tol = tol
+        # Define a region of interest
         region_of_interest = image.copy()
+
+        # Create an array to store the coordinates of the bounding boxes
         bboxes = np.zeros([len(contours), 4])
         # Draw bounding boxes
         for i in range(len(contours)):
             x, y, w, h = cv2.boundingRect(contours[i])
-            # Bounding boxes
+            # Draw bounding boxes
             cv2.rectangle(region_of_interest, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            # Compute coordinates for bounding boxes with tolerance
+            # Draw centroid of bounding box
+            cv2.circle(region_of_interest, (x + w // 2, y + h // 2), 5, (0, 0, 255), -1)
+            # Compute coordinates for extended bounding boxes
             tolx, toly = int(tol * w), int(tol * h)
-            # Bounding boxes with tolerance
+            # Draw extended bounding boxes
             cv2.rectangle(region_of_interest, (x - tolx, y - toly), (x + w + tolx, y + h + toly), (255, 0, 0), 2)
             # Store coordinates of each bounding box
             bboxes[i, :] = [x - tolx, y - toly + 410, w + tolx, h + toly]
 
+        # Count the number of persons based on the euclidean distance
         num_persons = 0
-        for bbox in bboxes:
-            x, y, w, h = bbox
-            for j in range(len(labels)):
-                if x <= labels[j, 0] <= x + w and y <= labels[j, 1] <= y + h:
-                    num_persons = num_persons + 1
+        hit = np.zeros(len(bboxes))
+        for j in range(len(labels)):
+            for k in range(len(bboxes)):
+                x, y, w, h = bboxes[k, :]
+                cent = (x + w // 2, y + h // 2)
+                dist = utl.euclidean_distance(cent, labels[j, :])
+                if dist <= 100 and hit[k] == 0:
+                    num_persons += 1
+                    hit[k] = 1
+                    # Draw centroid of bounding box with a hit
+                    cv2.circle(region_of_interest, tuple(map(int, (cent[0], cent[1] - 410))), 7, (255, 0, 0), -1)
 
         # Merge the region of interest with the remaining image
         output_image = utl.merge_images(remaining_image, region_of_interest)
@@ -117,19 +91,42 @@ def crowd_counting(image_path, images, labels, region_of_interest, tol, plotting
             windowed_image = utl.windowing(grayscale_image, 120, 109)
 
             # Apply Otsu's thresholding
-            _, binary_image = cv2.threshold(windowed_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            _, binary_image = cv2.threshold(windowed_image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-            # Apply negative transformation
-            negative_image = 255 - binary_image
+            # Apply morphological opening
+            kernel_opening = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+            opened_image = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel_opening)
 
-            # Filter connected white regions
-            filtered_image = filter_white_regions(negative_image,
-                                                  min_region_area=100, max_region_area=10000,
-                                                  min_aspect_ratio=0.3, max_aspect_ratio=5)
+            # Apply morphological closing
+            kernel_closing = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            closed_image = cv2.morphologyEx(opened_image, cv2.MORPH_CLOSE, kernel_closing)
+
+            # Find Sobel edges
+            sobel_x = cv2.Sobel(closed_image, cv2.CV_64F, 1, 0, ksize=3)
+            sobel_y = cv2.Sobel(closed_image, cv2.CV_64F, 0, 1, ksize=3)
+            sobel_edges = np.sqrt(sobel_x ** 2 + sobel_y ** 2)
+
+            # Threshold the Sobel edges
+            _, binary_edges = cv2.threshold(sobel_edges, 50, 255, cv2.THRESH_BINARY)
+
+            # Find contours based on the Sobel edges
+            contours, _ = cv2.findContours(binary_edges.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            # Create a mask for the contours to keep
+            keep_mask = np.zeros_like(binary_edges.astype(np.uint8))
+
+            # Filter contours based on area and aspect ratio
+            filtered_contours = []
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                aspect_ratio = cv2.boundingRect(contour)[2] / cv2.boundingRect(contour)[3]  # Width / height
+                if 200 < area < 800 and 0.4 < aspect_ratio < 4:
+                    filtered_contours.append(contour)
+                    cv2.drawContours(keep_mask, [contour], -1, 255, thickness=cv2.FILLED)
 
             # Count the number of persons on the image
-            count_estimated, count_detected, output_image = count_persons(cropped_image,
-                                                                          filtered_image,
+            count_estimated, count_detected, output_image = count_persons(filtered_contours,
+                                                                          cropped_image,
                                                                           remaining_image,
                                                                           annotated_persons,
                                                                           tol)
@@ -144,9 +141,11 @@ def crowd_counting(image_path, images, labels, region_of_interest, tol, plotting
                 # Extract coordinates of annotated persons for plotting
                 x, y = zip(*annotated_persons)
                 # Plot points on the image
-                plt.scatter(x, y, color='yellow', marker='o', s=2)
+                plt.scatter(x, y, color='blue', marker='o', s=2)
                 # Turn off axis labels
                 plt.axis('off')
+                # Save the figure
+                plt.savefig('../results/output_image_' + image_name + '.png')
                 # Display the image
                 plt.show()
 
@@ -165,7 +164,7 @@ labels = pd.read_csv(filepath_or_buffer=image_path + 'labels.csv', delimiter=','
 annotated_persons = np.genfromtxt(fname=image_path + 'labels_aggregated.csv', delimiter=',')
 annotated_persons = annotated_persons[1:11, 1][::-1]
 region_of_interest = [0, 1080 - 670, 1920, 670]
-tol = 0.15  # Tolerance rate for expanding bounding boxes
+tol = 0.0  # Tolerance rate for expanding bounding boxes
 estimated_persons, detected_persons = crowd_counting(image_path=image_path,
                                                      images=images,
                                                      labels=labels,

@@ -7,10 +7,10 @@ def crop_image(image, crop_coordinates):
         x, y, w, h = crop_coordinates
 
         # Crop the region of interest from the original image
-        cropped_region = image[y:y+h, x:x+w]
+        cropped_region = image[y:y + h, x:x + w]
 
         # Keep the remaining image
-        remaining_image = image[0:0+y, x:x+w]
+        remaining_image = image[0:0 + y, x:x + w]
 
         return cropped_region, remaining_image
 
@@ -47,7 +47,11 @@ def windowing(image, window_center, window_width):
         windowed_image = ((windowed_image - window_min) / (window_max - window_min) * 255).astype(np.uint8)
 
         return windowed_image
-    
+
     except Exception as e:
         print(f"Error: {str(e)}")
         return None
+
+
+def euclidean_distance(point1, point2):
+    return np.sqrt(np.sum((np.array(point2) - np.array(point1)) ** 2))
