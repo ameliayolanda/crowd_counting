@@ -137,7 +137,7 @@ def crowd_counting(image_path, images, labels, region_of_interest, tol, plotting
 
             if plotting:
                 # Plot the resulting image
-                plt.imshow(closed_image)
+                plt.imshow(output_image)
                 # Extract coordinates of annotated persons for plotting
                 x, y = zip(*annotated_persons)
                 # Plot points on the image
